@@ -240,9 +240,9 @@ function saml_protocol.dissector(buffer, pinfo, tree)
                     data = string.sub(data, iStart + 1, iEnd)
                   end
   
-                  data = string.sub(data, iEnd + 1)
-                  iStart = string.find(data,"=")
-                  data = string.sub(data, iStart + 1)
+                  --data = string.sub(data, iEnd + 1)
+                  --iStart = string.find(data,"=")
+                  --data = string.sub(data, iStart + 1)
                   data = urldecode(data)
     
                   subtree:add("DATA (relay):       ", data)
@@ -250,12 +250,13 @@ function saml_protocol.dissector(buffer, pinfo, tree)
                 end
               end
             end
-          
           end
         end
 
     end
   end
+
+
 
   if http2_headers_data then
       
@@ -265,7 +266,13 @@ function saml_protocol.dissector(buffer, pinfo, tree)
       if not(iStart == nil) then
 
         iStart = string.find(content,"=")
-        content = string.sub(content, iStart + 1)
+        iEnd = string.find(content,"&")
+        if iEnd == 0 then
+          content = string.sub(content, iStart + 1)
+        else
+          content = string.sub(content, iStart + 1, iEnd)
+        end
+
         content = urldecode(content)
         content = dec(content)
         content = string.gsub(content, "\" ", "\"\n\t\t\t\t")
@@ -275,7 +282,27 @@ function saml_protocol.dissector(buffer, pinfo, tree)
         pinfo.cols.protocol = saml_protocol.name
         local subtree = tree:add(saml_protocol, buffer(), "SAML Protocol Data")
         
-        subtree:add("DATA:       ", content)
+        subtree:add("DATA SAML Response:       ", content)
+
+        content = hex2string(http2_headers_data.label)
+        content = string.gsub(content, ":", "")
+        iStart = string.find(content:upper(),"TARGET")
+        if not(iStart == nil) then
+          content = string.sub(content, iStart)
+  
+          iStart = string.find(content,"=")
+          iEnd = string.find(content,"&")
+          if iEnd == 0 then
+            content = string.sub(content, iStart + 1)
+          else
+            content = string.sub(content, iStart + 1, iEnd)
+          end
+
+          content = urldecode(content)
+
+          subtree:add("DATA (TARGET):       ", content)
+  
+        end
 
       end
 
@@ -338,62 +365,49 @@ function saml_protocol.dissector(buffer, pinfo, tree)
     end
 
     if http_response_code.value == 200 then
-        
-        local data = http_data.value
-        iStart = string.find(data:upper(),"SAMLRESPONSE")
 
-        if not(iStart == nil) then
-          iStart = string.find(data:upper(),"VALUE=")
-          data = string.sub(data, iStart)
-          iStart = string.find(data:upper(),"'")
-          iEnd = string.find(data,"'/>")
-          if iEnd == 0 then
-            data = string.sub(data, iStart + 1)
-          else
-            data = string.sub(data, iStart + 1, iEnd - 1)
-          end
-          
-          data = urldecode(data)
-          data = dec(data)
-
-          data = string.gsub(data, "\" ", "\"\n\t\t\t\t")
-          data = string.gsub(data, " ", "\t")
-          data = string.gsub(data, "><", "> \n \t \t<")
-          --data = LibDeflate:DecompressDeflate(data)
-
-          pinfo.cols.protocol = saml_protocol.name
-          local subtree = tree:add(saml_protocol, buffer(), "SAML Protocol Data")
-            
-          subtree:add("DATA:       ", data)
-        else
-          iStart = string.find(data:upper(),"SAMLREQUEST")
-          if not(iStart == nil) then
-            iStart = string.find(data:upper(),"VALUE=")
-            data = string.sub(data, iStart)
-            iStart = string.find(data:upper(),"'")
-            iEnd = string.find(data,"'/>")
-            if iEnd == nil then
-              data = string.sub(data, iStart + 1)
-            else
-              data = string.sub(data, iStart + 1, iEnd - 1)
+          if http_request_uri then
+       
+            content = http_request_uri.value
+    
+            iStart = string.find(content:upper(),"SAMLREQUEST")
+            if not(iStart == nil) then
+    
+              iStart = string.find(content,"?")
+              if not(iStart == nil) then
+      
+                iEnd = string.find(content,"&")
+    
+                local query = string.sub(content, iStart + 1, iEnd - 1)
+      
+                iStart = string.find(query,"=")
+                query = string.sub(query, iStart + 1, iEnd)
+      
+                query = urldecode(query)
+                query = dec(query)
+                query = LibDeflate:DecompressDeflate(query)
+                if not(query==nil) then
+    
+                  pinfo.cols.protocol = saml_protocol.name
+                  local subtree = tree:add(saml_protocol, buffer(), "SAML Protocol Data")
+                 
+                  subtree:add(f_request_uri, content)
+    
+                  query = string.gsub(query, "\" ", "\"\n\t\t\t\t")
+                  query = string.gsub(query, " ", "\t")
+                  query = string.gsub(query, "><", "> \n \t \t<")
+                  subtree:add("SAML Request:       ", query)
+    
+                  query = string.sub(content, iEnd + 1)
+                  iStart = string.find(query,"=")
+                  query = string.sub(query, iStart + 1)
+                  query = urldecode(query)
+                  subtree:add("SAML Request (Relay State):       ", query)
+                end
+              end
             end
-            
-            data = urldecode(data)
-            data = dec(data)
-  
-            data = string.gsub(data, "\" ", "\"\n\t\t\t\t")
-            data = string.gsub(data, " ", "\t")
-            data = string.gsub(data, "><", "> \n \t \t<")
-            --data = LibDeflate:DecompressDeflate(data)
-  
-            pinfo.cols.protocol = saml_protocol.name
-            local subtree = tree:add(saml_protocol, buffer(), "SAML Protocol Data")
-              
-            subtree:add("DATA:       ", data)
-          end
-        end
 
-      --end
+      end
     end
   end
 
